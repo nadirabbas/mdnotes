@@ -29,7 +29,7 @@ services:
     env_file:
       - ./backend/.env
     ports:
-      - "3001:3001"
+      - "3023:3001"
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:3001/health || exit 1"]
       interval: 10s
