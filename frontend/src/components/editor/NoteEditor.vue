@@ -129,7 +129,6 @@
           v-if="showChat"
           :note-id="note.id"
           @close="showChat = false"
-          @new-message="onNewChatMessage"
           style="width: 300px; flex-shrink: 0;"
         />
       </transition>
@@ -213,6 +212,7 @@ onMounted(() => {
   socket.on('pointer:left', ({ socketId }) => {
     remotePointers.value = remotePointers.value.filter(p => p.socketId !== socketId)
   })
+  socket.on('chat:message', onRemoteChatMessage)
 })
 
 onUnmounted(() => {
@@ -222,6 +222,7 @@ onUnmounted(() => {
   socket.off('cursor:updated', onRemoteCursor)
   socket.off('pointer:updated', onRemotePointer)
   socket.off('pointer:left')
+  socket.off('chat:message')
 })
 
 function joinNote(noteId) {
@@ -359,8 +360,10 @@ function onMouseMove(e) {
   socket?.emit('pointer:update', { noteId: note.value.id, x, y })
 }
 
-function onNewChatMessage() {
-  if (!showChat.value) unreadCount.value++
+function onRemoteChatMessage(msg) {
+  if (msg.noteId === note.value?.id && !showChat.value && msg.user_id !== auth.user?.id) {
+    unreadCount.value++
+  }
 }
 
 watch(showChat, (v) => { if (v) unreadCount.value = 0 })
