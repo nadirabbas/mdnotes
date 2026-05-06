@@ -26,22 +26,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    environment:
-      NODE_ENV: production
-      PORT: 3001
-      FRONTEND_URL: http://localhost:3001
-      DB_HOST: db
-      DB_PORT: 5432
-      DB_NAME: mdnotes
-      DB_USER: mdnotes
-      DB_PASSWORD: mdnotes_secret
-      JWT_SECRET: ${JWT_SECRET:-change-this-secret-in-production}
-      JWT_EXPIRES: 7d
-      SMTP_HOST: ${SMTP_HOST:-smtp.ethereal.email}
-      SMTP_PORT: ${SMTP_PORT:-587}
-      SMTP_USER: ${SMTP_USER:-}
-      SMTP_PASS: ${SMTP_PASS:-}
-      SMTP_FROM: ${SMTP_FROM:-no-reply@mdnotes.app}
+    env_file:
+      - ./backend/.env
     ports:
       - "3001:3001"
     healthcheck:
