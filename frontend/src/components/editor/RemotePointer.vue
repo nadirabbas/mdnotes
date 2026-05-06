@@ -79,6 +79,7 @@ const pointerStyle = computed(() => ({
   position: absolute; border-left: 2px solid; pointer-events: none;
   animation: blink 1s step-end infinite;
   transition: left 0.1s ease, top 0.1s ease;
+  z-index: 101;
 }
 
 @keyframes blink {
@@ -89,10 +90,12 @@ const pointerStyle = computed(() => ({
 .cursor-label {
   position: absolute; top: -16px; left: -2px; font-size: 10px; font-weight: 600;
   color: #fff; padding: 1px 4px; border-radius: 2px; white-space: nowrap;
+  pointer-events: none;
 }
 
 .remote-selection {
   position: absolute; pointer-events: none;
-  mix-blend-mode: plus-lighter;
+  mix-blend-mode: screen;
+  border-radius: 1px;
 }
 </style>

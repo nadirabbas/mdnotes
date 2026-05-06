@@ -242,8 +242,18 @@ function onRemoteUpdate({ noteId, content, title, userId }) {
 }
 
 function onRemoteCursor(data) {
-  const pIdx = remotePointers.value.findIndex(p => p.socketId === data.socketId)
-  if (pIdx === -1) return
+  let pIdx = remotePointers.value.findIndex(p => p.socketId === data.socketId)
+  
+  if (pIdx === -1) {
+    remotePointers.value.push({
+      socketId: data.socketId,
+      name: data.name,
+      color: data.color,
+      x: 0, y: 0,
+      permission: data.permission
+    })
+    pIdx = remotePointers.value.length - 1
+  }
 
   if (!textareaRef.value) return
   
