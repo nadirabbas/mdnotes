@@ -4,7 +4,6 @@
     <div
       v-for="(rect, idx) in selectionRects"
       :key="'sel-' + idx"
-      v-if="permission !== 'view'"
       class="remote-selection"
       :style="{
         left: rect.left + 'px',
@@ -18,7 +17,7 @@
 
     <!-- Text Cursor (Blinking) -->
     <div
-      v-if="cursorPos && permission !== 'view'"
+      v-if="cursorPos"
       class="remote-cursor"
       :style="{
         left: cursorPos.left + 'px',

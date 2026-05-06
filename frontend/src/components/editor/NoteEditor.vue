@@ -104,9 +104,7 @@
             placeholder="Write markdown here…"
             @input="onContentChange"
             @scroll="syncScroll"
-            @keyup="onCursorMove"
-            @click="onCursorMove"
-            @select="onCursorMove"
+            @blur="onTextareaBlur"
             :readonly="isReadOnly"
             spellcheck="false"
           />
@@ -214,10 +212,12 @@ onMounted(() => {
     remotePointers.value = remotePointers.value.filter(p => p.socketId !== socketId)
   })
   socket.on('chat:message', onRemoteChatMessage)
+  document.addEventListener('selectionchange', onCursorMove)
 })
 
 onUnmounted(() => {
   if (note.value) leaveNote(note.value.id)
+  document.removeEventListener('selectionchange', onCursorMove)
   socket.off('note:updated', onRemoteUpdate)
   socket.off('note:users')
   socket.off('cursor:updated', onRemoteCursor)
@@ -254,6 +254,12 @@ function onRemoteCursor(data) {
       permission: data.permission
     })
     pIdx = remotePointers.value.length - 1
+  }
+
+  if (data.active === false) {
+    remotePointers.value[pIdx].cursorPos = null
+    remotePointers.value[pIdx].selectionRects = []
+    return
   }
 
   if (!textareaRef.value) return
@@ -351,10 +357,24 @@ function onTitleChange() {
 
 function onCursorMove() {
   if (!textareaRef.value || !note.value) return
+  if (document.activeElement !== textareaRef.value) return
+  
   socket?.emit('cursor:update', {
     noteId: note.value.id,
     start: textareaRef.value.selectionStart,
     end: textareaRef.value.selectionEnd,
+    name: auth.user.name,
+    color: auth.user.avatar_color
+  })
+}
+
+function onTextareaBlur() {
+  if (!note.value) return
+  socket?.emit('cursor:update', {
+    noteId: note.value.id,
+    start: 0,
+    end: 0,
+    active: false
   })
 }
 
