@@ -91,15 +91,9 @@ const pointerStyle = computed(() => ({
 }
 
 .remote-cursor {
-  position: absolute; border-left: 2px solid; pointer-events: none;
-  animation: blink 1s step-end infinite;
+  position: absolute; border-left: 3px solid; pointer-events: none;
   transition: left 0.1s ease, top 0.1s ease;
   z-index: 101;
-}
-
-@keyframes blink {
-  from, to { border-color: transparent; }
-  50% { border-color: inherit; }
 }
 
 .cursor-label {
