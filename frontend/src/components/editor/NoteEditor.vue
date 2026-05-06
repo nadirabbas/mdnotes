@@ -229,7 +229,7 @@ onMounted(() => {
 
   yDoc.value.on('update', (update, origin) => {
     if (origin !== 'local') return
-    socket.emit('y-update', { noteId: note.value.id, update: Buffer.from(update) })
+    socket.emit('y-update', { noteId: note.value.id, update })
   })
 
   socket.on('note:updated', onRemoteUpdate)
