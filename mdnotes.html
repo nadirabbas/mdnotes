@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="en"
+    class="dark">
+
+<head>
+    <link rel="icon"
+        href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2280%22 fill=%22%236366f1%22>✨</text></svg>">
+    <meta charset="UTF-8">
+    <meta name="viewport"
+        content="width=device-width, initial-scale=1.0">
+    <title>Gemini OLED Notes</title>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+    <!-- Highlight.js for syntax highlighting -->
+    <link rel="stylesheet"
+        href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+
+    <script type="importmap">
+      { "imports": { "@google/generative-ai": "https://esm.run/@google/generative-ai" } }
+    </script>
+    <style>
+        body {
+            background-color: #000;
+            color: #eee;
+        }
+
+        .resizer {
+            cursor: col-resize;
+            width: 4px;
+            transition: background 0.2s;
+        }
+
+        .resizer:hover {
+            background: #4f46e5;
+        }
+
+        .prose-oled {
+            color: #ccc;
+            line-height: 1.6;
+            max-width: 100%;
+        }
+
+        .prose-oled ul {
+            list-style-type: disc;
+            margin-left: 1.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .prose-oled h1,
+        .prose-oled h2 {
+            color: #fff;
+            font-weight: 700;
+            margin-top: 1.5em;
+            border-bottom: 1px solid #222;
+        }
+
+        /* Scrollable Code Blocks */
+        .prose-oled pre {
+            background-color: #0a0a0a !important;
+            border: 1px solid #222;
+            border-radius: 8px;
+            padding: 1rem;
+            margin: 1rem 0;
+            max-width: 100%;
+            overflow-x: auto;
+            /* Enable horizontal scroll */
+            white-space: pre;
+            /* Disable wrapping */
+            position: relative;
+            /* Context for copy button */
+        }
+
+        .prose-oled code {
+            font-family: 'Fira Code', monospace;
+            font-size: 0.85rem;
+            background: #1a1a1a;
+            padding: 0.2rem 0.4rem;
+            border-radius: 4px;
+        }
+
+        .prose-oled pre code {
+            background: transparent;
+            padding: 0;
+            display: block;
+        }
+
+        /* Copy Button Styling */
+        .copy-btn {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            padding: 4px 8px;
+            background: #1a1a1a;
+            border: 1px solid #333;
+            border-radius: 4px;
+            color: #888;
+            font-size: 10px;
+            cursor: pointer;
+            transition: all 0.2s;
+            z-index: 10;
+        }
+
+        .copy-btn:hover {
+            background: #222;
+            color: #fff;
+            border-color: #4f46e5;
+        }
+
+        /* Scrollbar Styling */
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 4px;
+            height: 4px;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #333;
+            border-radius: 10px;
+        }
+
+        .loader {
+            border-top-color: transparent;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+    </style>
+</head>
+
+<body class="h-screen overflow-hidden">
+
+    <div id="app"
+        class="flex h-full bg-black relative">
+
+        <!-- Global Loader -->
+        <div v-if="loading"
+            class="absolute inset-0 z-50 bg-black/60 flex items-center justify-center backdrop-blur-sm">
+            <div class="flex flex-col items-center">
+                <div class="w-10 h-10 border-4 border-indigo-500 border-solid rounded-full loader mb-2"></div>
+                <p class="text-xs font-mono text-indigo-400 uppercase tracking-widest">Gemini is thinking...</p>
+            </div>
+        </div>
+
+        <!-- Sidebar -->
+        <aside
+            :class="['bg-black border-r border-gray-800 flex flex-col transition-all duration-300 relative', isSidebarOpen ? 'w-80' : 'w-12']">
+            <button @click="isSidebarOpen = !isSidebarOpen"
+                class="absolute -right-3 top-4 z-10 bg-gray-800 rounded-full p-1 border border-gray-700">
+                <svg class="w-3 h-3 text-white"
+                    :class="{'rotate-180': !isSidebarOpen}"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24">
+                    <path d="M15 19l-7-7 7-7" />
+                </svg>
+            </button>
+
+            <div v-if="isSidebarOpen"
+                class="flex flex-col h-full overflow-hidden">
+                <div class="p-4 border-b border-gray-800 space-y-3">
+                    <div class="flex justify-between items-center">
+                        <h1 class="font-black text-xl tracking-tighter italic">OLED NOTES</h1>
+                        <button @click="addNote"
+                            class="bg-white text-black text-xs font-bold px-2 py-1 rounded hover:bg-gray-200 transition">+
+                            NEW</button>
+                    </div>
+                    <input v-model="apiKey"
+                        type="password"
+                        placeholder="Paste Gemini API Key"
+                        class="w-full bg-gray-900 text-[10px] p-1.5 rounded border border-gray-800 focus:border-indigo-500 outline-none">
+                    <div class="relative group">
+                        <input v-model="searchQuery"
+                            placeholder="Search notes..."
+                            class="w-full bg-gray-900 border border-gray-800 rounded px-3 py-1.5 text-sm focus:border-indigo-500 outline-none">
+                        <button @click="semanticSearch"
+                            :disabled="loading"
+                            class="absolute right-2 top-1.5 text-indigo-400 text-[10px] font-bold hover:text-white transition disabled:opacity-50">AI</button>
+                    </div>
+                </div>
+
+                <nav class="flex-1 overflow-y-auto custom-scrollbar p-2">
+                    <div v-for="note in filteredNotes"
+                        :key="note.id"
+                        @click="activeId = note.id"
+                        :class="['p-3 rounded mb-1 cursor-pointer border transition', activeId === note.id ? 'bg-gray-900 border-gray-700' : 'border-transparent hover:border-gray-800']">
+                        <div class="flex justify-between font-medium text-sm">
+                            <span class="truncate">{{ note.title || 'Untitled' }}</span>
+                            <button @click.stop="deleteNote(note.id)"
+                                class="text-gray-600 hover:text-red-500">&times;</button>
+                        </div>
+                        <div class="text-[9px] text-gray-500 mt-1 uppercase tracking-widest flex justify-between">
+                            <span>{{ formatDate(note.updatedAt) }}</span>
+                            <span v-if="note.score"
+                                class="text-indigo-400 font-bold">Match: {{ (note.score * 100).toFixed(0) }}%</span>
+                        </div>
+                    </div>
+                </nav>
+            </div>
+        </aside>
+
+        <!-- Main Editor -->
+        <main v-if="activeNote"
+            class="flex-1 flex flex-col bg-black overflow-hidden">
+            <div class="flex items-center justify-between px-4 py-2 border-b border-gray-800">
+                <input v-model="activeNote.title"
+                    class="bg-transparent font-bold text-lg outline-none flex-1"
+                    placeholder="Note Title">
+                <div class="flex gap-2"
+                    v-if="apiKey">
+                    <button @click="aiAction('summarize')"
+                        :disabled="loading"
+                        class="text-[10px] border border-gray-700 px-3 py-1 rounded hover:bg-gray-900 transition disabled:opacity-30">Summarize</button>
+                    <button @click="aiAction('title')"
+                        :disabled="loading"
+                        class="text-[10px] border border-gray-700 px-3 py-1 rounded hover:bg-gray-900 transition disabled:opacity-30">Gen
+                        Title</button>
+                </div>
+            </div>
+
+            <div class="flex-1 flex overflow-hidden relative">
+                <textarea v-model="activeNote.content"
+                    @input="updateTimestamp"
+                    :style="{ width: editorWidth + 'px' }"
+                    class="h-full p-6 bg-black outline-none border-r border-gray-900 resize-none font-mono text-sm leading-relaxed custom-scrollbar"></textarea>
+                <div class="resizer hidden md:block"
+                    @mousedown="startResizing"></div>
+                <div id="preview-pane"
+                    class="flex-1 p-6 overflow-y-auto prose-oled custom-scrollbar"
+                    v-html="renderMarkdown(activeNote.content)"></div>
+            </div>
+        </main>
+
+        <div v-else
+            class="flex-1 flex items-center justify-center text-gray-700 font-mono text-xs uppercase tracking-widest">
+            Select a note to begin
+        </div>
+    </div>
+
+    <script type="module">
+        import { GoogleGenerativeAI } from "@google/generative-ai";
+        const { createApp, ref, computed, watch, onMounted, nextTick } = Vue;
+
+        createApp({
+            setup() {
+                const notes = ref(JSON.parse(localStorage.getItem('gemini_notes') || '[]'));
+                const apiKey = ref(localStorage.getItem('gemini_key') || '');
+                const activeId = ref(null);
+                const searchQuery = ref('');
+                const isSidebarOpen = ref(true);
+                const editorWidth = ref(window.innerWidth / 2 - 100);
+                const loading = ref(false);
+
+                const activeNote = computed(() => notes.value.find(n => n.id === activeId.value));
+
+                marked.setOptions({
+                    highlight: function (code, lang) {
+                        const language = hljs.getLanguage(lang) ? lang : 'plaintext';
+                        return hljs.highlight(code, { language }).value;
+                    },
+                    langPrefix: 'hljs language-'
+                });
+
+                // Inject Copy Buttons and Highlight
+                const processCodeBlocks = async () => {
+                    await nextTick();
+                    const pane = document.getElementById('preview-pane');
+                    if (!pane) return;
+
+                    pane.querySelectorAll('pre').forEach((pre) => {
+                        // Avoid duplicate buttons
+                        if (pre.querySelector('.copy-btn')) return;
+
+                        const btn = document.createElement('button');
+                        btn.className = 'copy-btn';
+                        btn.innerText = 'COPY';
+                        btn.onclick = () => {
+                            const code = pre.querySelector('code').innerText;
+                            navigator.clipboard.writeText(code);
+                            btn.innerText = 'COPIED!';
+                            setTimeout(() => btn.innerText = 'COPY', 2000);
+                        };
+                        pre.appendChild(btn);
+
+                        const codeEl = pre.querySelector('code');
+                        if (codeEl) hljs.highlightElement(codeEl);
+                    });
+                };
+
+                watch(() => activeNote.value?.content, processCodeBlocks);
+                watch(activeId, processCodeBlocks);
+
+                onMounted(() => {
+                    let migrated = false;
+                    notes.value = notes.value.map(n => {
+                        if (!n.updatedAt) { n.updatedAt = Date.now(); migrated = true; }
+                        if (!n.createdAt) { n.createdAt = Date.now(); migrated = true; }
+                        if (n.score === undefined) { n.score = null; migrated = true; }
+                        return n;
+                    });
+                    if (migrated) localStorage.setItem('gemini_notes', JSON.stringify(notes.value));
+                });
+
+                const filteredNotes = computed(() => {
+                    let list = [...notes.value];
+                    if (searchQuery.value) {
+                        list = list.filter(n =>
+                            n.title.toLowerCase().includes(searchQuery.value.toLowerCase()) ||
+                            n.content.toLowerCase().includes(searchQuery.value.toLowerCase())
+                        );
+                    }
+                    return list.sort((a, b) => (b.score || 0) - (a.score || 0) || b.updatedAt - a.updatedAt);
+                });
+
+                const aiAction = async (type) => {
+                    if (!apiKey.value) return alert('Enter API Key');
+                    loading.value = true;
+                    try {
+                        const genAI = new GoogleGenerativeAI(apiKey.value);
+                        const model = genAI.getGenerativeModel({
+                            model: "gemini-2.5-flash",
+                            systemInstruction: type === 'title'
+                                ? "You are a title generator. Return ONLY the final title string. No quotes, no preamble. Just the text."
+                                : "You are a summary assistant. Return 3 concise bullet points. Use markdown."
+                        });
+
+                        const prompt = type === 'summarize' ? `Summarize: ${activeNote.value.content}` : `Title for: ${activeNote.value.content}`;
+                        const result = await model.generateContent(prompt);
+                        const text = result.response.text().trim();
+
+                        if (type === 'summarize') activeNote.value.content += `\n\n### AI Summary\n${text}`;
+                        else activeNote.value.title = text.replace(/^"|"$/g, '');
+                        updateTimestamp();
+                    } catch (e) { alert("Gemini Error: " + e.message); }
+                    loading.value = false;
+                };
+
+                const semanticSearch = async () => {
+                    if (!apiKey.value || !searchQuery.value) return;
+                    loading.value = true;
+                    try {
+                        const genAI = new GoogleGenerativeAI(apiKey.value);
+                        const model = genAI.getGenerativeModel({ model: "text-embedding-004" });
+                        const qEmbed = (await model.embedContent(searchQuery.value)).embedding.values;
+                        for (let note of notes.value) {
+                            const content = (note.title + " " + note.content).trim();
+                            if (!content) { note.score = 0; continue; }
+                            const nEmbed = (await model.embedContent(content)).embedding.values;
+                            note.score = dotProduct(qEmbed, nEmbed);
+                        }
+                    } catch (e) { alert("Embedding Error: " + e.message); }
+                    loading.value = false;
+                };
+
+                const dotProduct = (a, b) => a.map((x, i) => a[i] * b[i]).reduce((m, n) => m + n, 0);
+                const addNote = () => {
+                    const now = Date.now();
+                    const note = { id: now, title: '', content: '', createdAt: now, updatedAt: now, score: null };
+                    notes.value.unshift(note);
+                    activeId.value = note.id;
+                };
+                const deleteNote = (id) => { if (confirm('Delete?')) notes.value = notes.value.filter(n => n.id !== id); };
+                const updateTimestamp = () => { if (activeNote.value) activeNote.value.updatedAt = Date.now(); };
+                const formatDate = (ts) => new Date(ts).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+                const renderMarkdown = (c) => marked.parse(c || '');
+                const startResizing = (e) => {
+                    const onMove = (me) => editorWidth.value = me.clientX - (isSidebarOpen.value ? 320 : 48);
+                    document.addEventListener('mousemove', onMove);
+                    document.addEventListener('mouseup', () => document.removeEventListener('mousemove', onMove), { once: true });
+                };
+
+                watch(notes, (n) => localStorage.setItem('gemini_notes', JSON.stringify(n)), { deep: true });
+                watch(apiKey, (k) => localStorage.setItem('gemini_key', k));
+
+                return {
+                    notes, activeId, searchQuery, isSidebarOpen, editorWidth, loading, apiKey,
+                    filteredNotes, activeNote, addNote, deleteNote, renderMarkdown, formatDate,
+                    updateTimestamp, startResizing, aiAction, semanticSearch
+                };
+            }
+        }).mount('#app');
+    </script>
+</body>
+
+</html>
