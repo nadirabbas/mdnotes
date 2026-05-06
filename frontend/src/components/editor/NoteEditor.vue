@@ -141,6 +141,7 @@ import { useNotesStore } from '@/stores/notes.js'
 import { useAuthStore } from '@/stores/auth.js'
 import { useToastStore } from '@/stores/toast.js'
 import { api } from '@/lib/api.js'
+import * as Y from 'yjs'
 import { renderMarkdown, debounce, getCaretCoordinates, getSelectionRects } from '@/lib/utils.js'
 import { getSocket } from '@/lib/socket.js'
 import UserAvatar from '@/components/ui/UserAvatar.vue'
@@ -187,6 +188,11 @@ const remotePointers = ref([])
 const renderedMarkdown = computed(() => renderMarkdown(localContent.value))
 const lineCount = computed(() => (localContent.value.split('\n').length) || 1)
 
+// Yjs setup
+const yDoc = ref(new Y.Doc())
+const yText = computed(() => yDoc.value.getText('content'))
+let isRemoteUpdate = false
+
 // Socket setup
 const socket = getSocket()
 
@@ -199,11 +205,33 @@ watch(() => note.value?.id, (newId, oldId) => {
     lastSaved.value = false
     activeUsers.value = []
     remotePointers.value = []
+    
+    // Reset Yjs
+    yDoc.value.destroy()
+    yDoc.value = new Y.Doc()
+    
     joinNote(newId)
   }
 }, { immediate: true })
 
 onMounted(() => {
+  socket.on('note:init', ({ state }) => {
+    Y.applyUpdate(yDoc.value, new Uint8Array(state))
+    localContent.value = yText.value.toString()
+  })
+  
+  socket.on('y-updated', ({ update }) => {
+    isRemoteUpdate = true
+    Y.applyUpdate(yDoc.value, new Uint8Array(update))
+    localContent.value = yText.value.toString()
+    nextTick(() => { isRemoteUpdate = false })
+  })
+
+  yDoc.value.on('update', (update, origin) => {
+    if (origin !== 'local') return
+    socket.emit('y-update', { noteId: note.value.id, update: Buffer.from(update) })
+  })
+
   socket.on('note:updated', onRemoteUpdate)
   socket.on('note:users', (users) => { activeUsers.value = users })
   socket.on('cursor:updated', onRemoteCursor)
@@ -237,9 +265,9 @@ function leaveNote(noteId) {
 function onRemoteUpdate({ noteId, content, title, userId }) {
   if (userId === auth.user?.id) return
   if (noteId !== note.value?.id) return
-  if (content !== undefined) localContent.value = content
+  // Content is handled by Yjs y-updated event
   if (title !== undefined) localTitle.value = title
-  notesStore.applyRemoteUpdate(noteId, { content, title })
+  notesStore.applyRemoteUpdate(noteId, { title })
 }
 
 function onRemoteCursor(data) {
@@ -334,14 +362,32 @@ async function generateTitle() {
 }
 
 function onContentChange() {
-  if (isReadOnly.value) return
-  socket?.emit('note:update', {
-    noteId: note.value.id,
-    content: localContent.value,
-  })
+  if (isReadOnly.value || isRemoteUpdate) return
+  
+  const oldText = yText.value.toString()
+  const newText = localContent.value
+  
+  // Intelligent diffing for CRDT
+  let commonStart = 0
+  while (commonStart < oldText.length && commonStart < newText.length && oldText[commonStart] === newText[commonStart]) {
+    commonStart++
+  }
+  
+  let commonEnd = 0
+  while (commonEnd < oldText.length - commonStart && commonEnd < newText.length - commonStart && oldText[oldText.length - 1 - commonEnd] === newText[newText.length - 1 - commonEnd]) {
+    commonEnd++
+  }
+  
+  const delLen = oldText.length - commonStart - commonEnd
+  const insText = newText.substring(commonStart, newText.length - commonEnd)
+  
+  yDoc.value.transact(() => {
+    if (delLen > 0) yText.value.delete(commonStart, delLen)
+    if (insText.length > 0) yText.value.insert(commonStart, insText)
+  }, 'local')
+
   notesStore.applyRemoteUpdate(note.value.id, { content: localContent.value })
-  debouncedSave()
-  // Inject copy buttons after render
+  // No need for debouncedSave() as backend saves Yjs state
   nextTick(injectCopyButtons)
 }
 

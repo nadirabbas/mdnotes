@@ -1,8 +1,19 @@
 import jwt from 'jsonwebtoken';
+import * as Y from 'yjs';
 import { pool } from '../db.js';
 
 // Track active users per note: noteId -> Map<socketId, userInfo>
 const activeUsers = new Map();
+// Track Yjs Docs per note: noteId -> Y.Doc
+const yDocs = new Map();
+
+function getYDoc(noteId) {
+  if (!yDocs.has(noteId)) {
+    const doc = new Y.Doc();
+    yDocs.set(noteId, doc);
+  }
+  return yDocs.get(noteId);
+}
 
 function getNoteUsers(noteId) {
   if (!activeUsers.has(noteId)) activeUsers.set(noteId, new Map());
@@ -63,6 +74,16 @@ export function setupSocketHandlers(io) {
         socket.join(noteId);
         socket.currentNoteId = noteId;
 
+        // Initialize YDoc with DB content if first join
+        const doc = getYDoc(noteId);
+        const yText = doc.getText('content');
+        if (yText.length === 0) {
+          const noteData = await pool.query('SELECT content FROM notes WHERE id = $1', [noteId]);
+          if (noteData.rows[0]?.content) {
+            yText.insert(0, noteData.rows[0].content);
+          }
+        }
+
         const users = getNoteUsers(noteId);
         users.set(socket.id, {
           id: socket.user.id,
@@ -76,6 +97,11 @@ export function setupSocketHandlers(io) {
 
         // Broadcast updated user list
         io.to(noteId).emit('note:users', Array.from(users.values()));
+        
+        // Send initial state
+        const state = Y.encodeStateAsUpdate(doc);
+        socket.emit('note:init', { noteId, state: Buffer.from(state) });
+        
         socket.emit('note:joined', { noteId });
       } catch (err) {
         console.error('join:note error:', err);
@@ -92,40 +118,40 @@ export function setupSocketHandlers(io) {
       socket.currentNoteId = null;
     });
 
-    // Real-time content update (broadcast to room, save to DB debounced)
-    socket.on('note:update', async ({ noteId, content, title }) => {
+    // Yjs Update (Binary delta)
+    socket.on('y-update', async ({ noteId, update }) => {
       if (!socket.currentNoteId || socket.currentNoteId !== noteId) return;
 
-      // Verify edit permission
       const users = getNoteUsers(noteId);
       const user = users.get(socket.id);
       if (!user || user.permission === 'view') return;
 
-      // Broadcast to others in room (not sender)
-      socket.to(noteId).emit('note:updated', {
-        noteId,
-        content,
-        title,
-        userId: socket.user.id,
-      });
+      const doc = getYDoc(noteId);
+      Y.applyUpdate(doc, new Uint8Array(update));
 
-      // Save to DB (debounced handled by DB driver or simply here for simplicity)
+      // Broadcast to others
+      socket.to(noteId).emit('y-updated', { noteId, update });
+
+      // Persist to DB (throttled/debounced)
       try {
-        const updates = [];
-        const values = [];
-        let idx = 1;
-        if (content !== undefined) { updates.push(`content = $${idx++}`); values.push(content); }
-        if (title !== undefined) { updates.push(`title = $${idx++}`); values.push(title); }
-        if (updates.length) {
-          updates.push('updated_at = NOW()');
-          values.push(noteId);
-          await pool.query(
-            `UPDATE notes SET ${updates.join(', ')} WHERE id = $${idx}`,
-            values
-          );
-        }
+        const text = doc.getText('content').toString();
+        await pool.query('UPDATE notes SET content = $1, updated_at = NOW() WHERE id = $2', [text, noteId]);
       } catch (err) {
-        console.error('note:update DB save error:', err);
+        console.error('y-update DB save error:', err);
+      }
+    });
+
+    // Real-time metadata update (title)
+    socket.on('note:update', async ({ noteId, title }) => {
+      if (!socket.currentNoteId || socket.currentNoteId !== noteId) return;
+
+      const users = getNoteUsers(noteId);
+      const user = users.get(socket.id);
+      if (!user || user.permission === 'view') return;
+
+      if (title !== undefined) {
+        socket.to(noteId).emit('note:updated', { noteId, title, userId: socket.user.id });
+        await pool.query('UPDATE notes SET title = $1, updated_at = NOW() WHERE id = $2', [title, noteId]);
       }
     });
 
