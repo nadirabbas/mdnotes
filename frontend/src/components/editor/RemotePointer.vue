@@ -32,9 +32,23 @@
 
     <!-- Mouse Pointer -->
     <div class="remote-pointer" :style="pointerStyle">
-      <svg class="pointer-cursor" viewBox="0 0 16 24" width="16" height="24" :fill="color">
+      <!-- Default Arrow -->
+      <svg v-if="cursorType === 'default' || !cursorType" class="pointer-cursor" viewBox="0 0 16 24" width="16" height="24" :fill="color">
         <path d="M0 0 L0 20 L5 15 L8 22 L10 21 L7 14 L13 14 Z" :stroke="color" stroke-width="1" />
       </svg>
+      <!-- Hand Pointer -->
+      <svg v-else-if="cursorType === 'pointer'" class="pointer-cursor" viewBox="0 0 24 24" width="20" height="20" :fill="color">
+        <path d="M10 22c-2.21 0-4-1.79-4-4V7c0-1.1.9-2 2-2s2 .9 2 2v7h1V3c0-1.1.9-2 2-2s2 .9 2 2v11h1V4c0-1.1.9-2 2-2s2 .9 2 2v10h1V7c0-1.1.9-2 2-2s2 .9 2 2v11c0 3.31-2.69 6-6 6h-6z" :stroke="color" stroke-width="1" />
+      </svg>
+      <!-- Text I-Beam -->
+      <svg v-else-if="cursorType === 'text'" class="pointer-cursor" viewBox="0 0 24 24" width="16" height="24" :fill="color">
+        <path d="M13 5h5V3H6v2h5v14H6v2h12v-2h-5V5z" :stroke="color" stroke-width="1" />
+      </svg>
+      <!-- Fallback Arrow -->
+      <svg v-else class="pointer-cursor" viewBox="0 0 16 24" width="16" height="24" :fill="color">
+        <path d="M0 0 L0 20 L5 15 L8 22 L10 21 L7 14 L13 14 Z" :stroke="color" stroke-width="1" />
+      </svg>
+
       <span class="pointer-label" :style="{ background: color }">{{ name }}</span>
     </div>
   </div>
@@ -50,7 +64,8 @@ const props = defineProps({
   y: { type: Number, default: 0 },
   cursorPos: { type: Object, default: null }, // { left, top, height }
   selectionRects: { type: Array, default: () => [] }, // [{ left, top, width, height }]
-  permission: { type: String, default: 'view' }
+  permission: { type: String, default: 'view' },
+  cursorType: { type: String, default: 'default' }
 })
 
 const pointerStyle = computed(() => ({

@@ -11,6 +11,7 @@
       :cursor-pos="p.cursorPos"
       :selection-rects="p.selectionRects"
       :permission="p.permission"
+      :cursor-type="p.cursorType"
     />
 
     <!-- Toolbar -->
@@ -364,10 +365,16 @@ function onMouseMove(e) {
   const now = Date.now()
   if (now - lastPointerEmit < 50) return
   lastPointerEmit = now
+  
   const rect = editorWrapper.value.getBoundingClientRect()
   const x = ((e.clientX - rect.left) / rect.width) * 100
   const y = ((e.clientY - rect.top) / rect.height) * 100
-  socket?.emit('pointer:update', { noteId: note.value.id, x, y })
+  
+  // Detect current cursor style of the element under mouse
+  const target = document.elementFromPoint(e.clientX, e.clientY)
+  const cursorType = target ? window.getComputedStyle(target).cursor : 'default'
+  
+  socket?.emit('pointer:update', { noteId: note.value.id, x, y, cursorType })
 }
 
 function onRemoteChatMessage(msg) {

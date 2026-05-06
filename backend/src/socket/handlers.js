@@ -149,12 +149,12 @@ export function setupSocketHandlers(io) {
     });
 
     // Mouse pointer position (relative %)
-    socket.on('pointer:update', ({ noteId, x, y }) => {
+    socket.on('pointer:update', ({ noteId, x, y, cursorType }) => {
       if (socket.currentNoteId !== noteId) return;
       const users = getNoteUsers(noteId);
       const user = users.get(socket.id);
       if (user) {
-        user.pointer = { x, y };
+        user.pointer = { x, y, cursorType };
         socket.to(noteId).emit('pointer:updated', {
           socketId: socket.id,
           userId: socket.user.id,
@@ -162,6 +162,7 @@ export function setupSocketHandlers(io) {
           color: socket.user.avatar_color,
           x,
           y,
+          cursorType,
         });
       }
     });
