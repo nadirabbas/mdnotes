@@ -12,6 +12,15 @@ import shareRoutes from './routes/shares.js';
 import { setupSocketHandlers } from './socket/handlers.js';
 import { authMiddleware } from './middleware/auth.js';
 
+// Global error handling to prevent process crashes
+process.on('uncaughtException', (err) => {
+  console.error('[UNCAUGHT EXCEPTION] Caught exception:', err);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('[UNHANDLED REJECTION] Unhandled Rejection at:', promise, 'reason:', reason);
+});
+
 const app = express();
 const httpServer = createServer(app);
 

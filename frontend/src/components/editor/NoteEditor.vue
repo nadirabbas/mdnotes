@@ -8,8 +8,8 @@
       :color="p.color"
       :x="p.x"
       :y="p.y"
-      :cursor-pos="p.cursorPos"
-      :selection-rects="p.selectionRects"
+      :cursor-pos="(!previewMode && !isReadOnly) ? p.cursorPos : null"
+      :selection-rects="(!previewMode && !isReadOnly) ? p.selectionRects : []"
       :permission="p.permission"
       :cursor-type="p.cursorType"
     />
