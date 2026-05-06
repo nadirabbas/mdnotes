@@ -8,6 +8,9 @@
       :color="p.color"
       :x="p.x"
       :y="p.y"
+      :cursor-pos="p.cursorPos"
+      :selection-rects="p.selectionRects"
+      :permission="p.permission"
     />
 
     <!-- Toolbar -->
@@ -140,7 +143,7 @@ import { useNotesStore } from '@/stores/notes.js'
 import { useAuthStore } from '@/stores/auth.js'
 import { useToastStore } from '@/stores/toast.js'
 import { api } from '@/lib/api.js'
-import { renderMarkdown, debounce } from '@/lib/utils.js'
+import { renderMarkdown, debounce, getCaretCoordinates, getSelectionRects } from '@/lib/utils.js'
 import { getSocket } from '@/lib/socket.js'
 import UserAvatar from '@/components/ui/UserAvatar.vue'
 import ChatPanel from '@/components/editor/ChatPanel.vue'
@@ -238,13 +241,45 @@ function onRemoteUpdate({ noteId, content, title, userId }) {
 }
 
 function onRemoteCursor(data) {
-  // Could render cursor position in textarea — simplified here
+  const pIdx = remotePointers.value.findIndex(p => p.socketId === data.socketId)
+  if (pIdx === -1) return
+
+  if (!textareaRef.value) return
+  
+  const tRect = textareaRef.value.getBoundingClientRect()
+  const wRect = editorWrapper.value.getBoundingClientRect()
+  const offsetX = tRect.left - wRect.left
+  const offsetY = tRect.top - wRect.top
+  
+  const rawCursor = getCaretCoordinates(textareaRef.value, data.end)
+  const cursorPos = {
+    top: rawCursor.top + offsetY,
+    left: rawCursor.left + offsetX,
+    height: rawCursor.height
+  }
+
+  const selectionRects = getSelectionRects(textareaRef.value, data.start, data.end).map(r => ({
+    ...r,
+    top: r.top + offsetY,
+    left: r.left + offsetX
+  }))
+  
+  remotePointers.value[pIdx] = {
+    ...remotePointers.value[pIdx],
+    cursorPos,
+    selectionRects,
+    permission: data.permission
+  }
 }
 
 function onRemotePointer(data) {
   const idx = remotePointers.value.findIndex(p => p.socketId === data.socketId)
-  if (idx !== -1) remotePointers.value[idx] = data
-  else remotePointers.value.push(data)
+  if (idx !== -1) {
+    // Preserve cursor/selection info if it exists
+    remotePointers.value[idx] = { ...remotePointers.value[idx], ...data }
+  } else {
+    remotePointers.value.push(data)
+  }
 }
 
 // Debounced save to DB
@@ -306,7 +341,8 @@ function onCursorMove() {
   if (!textareaRef.value || !note.value) return
   socket?.emit('cursor:update', {
     noteId: note.value.id,
-    position: textareaRef.value.selectionStart,
+    start: textareaRef.value.selectionStart,
+    end: textareaRef.value.selectionEnd,
   })
 }
 

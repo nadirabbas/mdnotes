@@ -36,9 +36,10 @@ export function setupSocketHandlers(io) {
     // Join a note room
     socket.on('join:note', async ({ noteId }) => {
       try {
-        // Verify access
+        // Verify access and get permission
         const { rows } = await pool.query(`
-          SELECT 1 FROM notes n
+          SELECT CASE WHEN n.owner_id = $1 THEN 'owner' ELSE ns.permission END as permission
+          FROM notes n
           LEFT JOIN note_shares ns ON ns.note_id = n.id AND ns.user_id = $1
           WHERE n.id = $2 AND (n.owner_id = $1 OR ns.user_id = $1)
         `, [socket.user.id, noteId]);
@@ -47,6 +48,8 @@ export function setupSocketHandlers(io) {
           socket.emit('error', { message: 'Access denied' });
           return;
         }
+
+        const permission = rows[0].permission;
 
         // Leave previous note rooms
         const prevRoom = socket.currentNoteId;
@@ -66,6 +69,7 @@ export function setupSocketHandlers(io) {
           name: socket.user.name,
           color: socket.user.avatar_color,
           socketId: socket.id,
+          permission,
           cursor: null,
           pointer: null,
         });
@@ -92,6 +96,11 @@ export function setupSocketHandlers(io) {
     socket.on('note:update', async ({ noteId, content, title }) => {
       if (!socket.currentNoteId || socket.currentNoteId !== noteId) return;
 
+      // Verify edit permission
+      const users = getNoteUsers(noteId);
+      const user = users.get(socket.id);
+      if (!user || user.permission === 'view') return;
+
       // Broadcast to others in room (not sender)
       socket.to(noteId).emit('note:updated', {
         noteId,
@@ -100,7 +109,7 @@ export function setupSocketHandlers(io) {
         userId: socket.user.id,
       });
 
-      // Save to DB
+      // Save to DB (debounced handled by DB driver or simply here for simplicity)
       try {
         const updates = [];
         const values = [];
@@ -121,18 +130,20 @@ export function setupSocketHandlers(io) {
     });
 
     // Cursor position (textarea character index)
-    socket.on('cursor:update', ({ noteId, position }) => {
+    socket.on('cursor:update', ({ noteId, start, end }) => {
       if (socket.currentNoteId !== noteId) return;
       const users = getNoteUsers(noteId);
       const user = users.get(socket.id);
       if (user) {
-        user.cursor = position;
+        user.cursor = { start, end };
         socket.to(noteId).emit('cursor:updated', {
           socketId: socket.id,
           userId: socket.user.id,
           name: socket.user.name,
           color: socket.user.avatar_color,
-          position,
+          permission: user.permission,
+          start,
+          end,
         });
       }
     });
