@@ -88,7 +88,7 @@
     <div class="editor-body">
       <!-- Editor pane -->
       <div
-        v-show="!previewMode"
+        v-show="!previewMode && !isReadOnly"
         class="editor-pane-container"
         :style="{ width: editorWidth + 'px' }"
       >
@@ -112,12 +112,12 @@
       </div>
 
       <!-- Resize handle -->
-      <div v-show="!previewMode" class="resizer" @mousedown="startResize" />
+      <div v-show="!previewMode && !isReadOnly" class="resizer" @mousedown="startResize" />
 
       <!-- Preview pane -->
       <div
         class="preview-pane prose custom-scrollbar"
-        :style="previewMode ? { flex: 1 } : { flex: 1 }"
+        :style="previewMode || isReadOnly ? { flex: 1 } : { flex: 1 }"
         ref="previewRef"
         v-html="renderedMarkdown"
       />
